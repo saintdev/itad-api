@@ -7,14 +7,14 @@ use derive_builder::Builder;
 use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 pub enum RegionDisplayOptions {
     Names,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Builder)]
 #[builder(setter(into, strip_option))]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 pub struct Regions {
     #[serde(serialize_with = "super::utils::serialize_hash_set_urlencoded")]
     optional: Option<HashSet<RegionDisplayOptions>>,
@@ -41,7 +41,7 @@ impl Endpoint for Regions {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 pub enum StoresDisplayOptions {
     Deals,
     Catalog,
@@ -49,7 +49,7 @@ pub enum StoresDisplayOptions {
 
 #[derive(Debug, Clone, Serialize, Builder)]
 #[builder(setter(into, strip_option))]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 pub struct StoresInRegion<'a> {
     region: Cow<'a, str>,
     country: Option<Cow<'a, str>>,
