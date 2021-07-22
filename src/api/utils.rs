@@ -44,3 +44,28 @@ where
         .collect();
     serializer.serialize_str(&out.join("%2C"))
 }
+
+pub(crate) fn serialize_option_bool_as_int<S>(
+    value: &Option<bool>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    if let Some(value) = value {
+        serialize_bool_as_int(value, serializer)
+    } else {
+        serializer.serialize_none()
+    }
+}
+
+pub(crate) fn serialize_bool_as_int<S>(value: &bool, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    if *value {
+        serializer.serialize_u64(1)
+    } else {
+        serializer.serialize_u64(0)
+    }
+}
