@@ -1,5 +1,6 @@
 mod client;
 mod common;
+pub mod deals;
 mod endpoint;
 mod error;
 pub mod game;
