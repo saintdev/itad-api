@@ -8,6 +8,7 @@ mod query;
 pub mod search;
 pub mod user;
 mod utils;
+pub mod waitlist;
 pub mod web;
 
 pub use client::{AsyncClient, Client, RestClient};
