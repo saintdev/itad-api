@@ -7,6 +7,7 @@ mod error;
 pub mod game;
 mod query;
 pub mod search;
+pub mod stats;
 pub mod user;
 mod utils;
 pub mod waitlist;
