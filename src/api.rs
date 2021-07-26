@@ -1,4 +1,5 @@
 mod client;
+pub mod collection;
 mod common;
 pub mod deals;
 mod endpoint;
