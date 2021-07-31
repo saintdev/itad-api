@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::{api, auth::AuthError};
+use crate::api;
 
 pub type ItadApiResult<T> = Result<T, ItadApiError>;
 
