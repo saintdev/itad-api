@@ -1,48 +1,15 @@
-use std::collections::HashSet;
+use serde::Serializer;
 
-use serde::{Serialize, Serializer};
-
-pub(crate) fn serialize_hash_set_urlencoded<S, T>(
-    value: &Option<HashSet<T>>,
+pub(crate) fn serialize_as_csv<S, T>(
+    iter: impl IntoIterator<Item = T>,
     serializer: S,
 ) -> Result<S::Ok, S::Error>
 where
-    S: Serializer,
-    T: Serialize,
-{
-    if let Some(value) = value {
-        serialize_iter_urlencoded(value, serializer)
-    } else {
-        serializer.serialize_none()
-    }
-}
-
-pub(crate) fn serialize_vec_urlencoded<S, T>(
-    value: &Option<Vec<T>>,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-    T: Serialize,
-{
-    if let Some(value) = value {
-        serialize_iter_urlencoded(value, serializer)
-    } else {
-        serializer.serialize_none()
-    }
-}
-
-pub(crate) fn serialize_iter_urlencoded<'a, I, S>(iter: I, serializer: S) -> Result<S::Ok, S::Error>
-where
-    I: IntoIterator,
-    I::Item: Serialize + 'a,
+    T: ToString,
     S: Serializer,
 {
-    let out: Vec<_> = iter
-        .into_iter()
-        .map(|value| serde_urlencoded::to_string(value).expect("Unable to serialize value"))
-        .collect();
-    serializer.serialize_str(&out.join("%2C"))
+    let out: Vec<_> = iter.into_iter().map(|v| v.to_string()).collect();
+    serializer.serialize_str(&out.join(","))
 }
 
 pub(crate) fn serialize_option_bool_as_int<S>(
@@ -53,19 +20,12 @@ where
     S: Serializer,
 {
     if let Some(value) = value {
-        serialize_bool_as_int(value, serializer)
+        if *value {
+            serializer.serialize_u64(1)
+        } else {
+            serializer.serialize_u64(0)
+        }
     } else {
         serializer.serialize_none()
-    }
-}
-
-pub(crate) fn serialize_bool_as_int<S>(value: &bool, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    if *value {
-        serializer.serialize_u64(1)
-    } else {
-        serializer.serialize_u64(0)
     }
 }

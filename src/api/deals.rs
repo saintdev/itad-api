@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::BTreeSet};
 
 use derive_builder::Builder;
 use http::Method;
@@ -28,8 +28,10 @@ pub struct DealsList<'a> {
     limit: Option<usize>,
     region: Option<Cow<'a, str>>,
     country: Option<Cow<'a, str>>,
-    #[serde(serialize_with = "super::utils::serialize_vec_urlencoded")]
-    shops: Option<Vec<Cow<'a, str>>>,
+    #[builder(setter(name = "_shops"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    shops: BTreeSet<Cow<'a, str>>,
     #[serde(serialize_with = "serialize_sorting")]
     sort: Option<DealsSorting>,
 }
@@ -37,6 +39,29 @@ pub struct DealsList<'a> {
 impl<'a> DealsList<'a> {
     pub fn builder() -> DealsListBuilder<'a> {
         DealsListBuilder::default()
+    }
+}
+
+impl<'a> DealsListBuilder<'a> {
+    pub fn shop<T>(&mut self, shop: T) -> &mut Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.shops
+            .get_or_insert_with(BTreeSet::new)
+            .insert(shop.into());
+        self
+    }
+
+    pub fn shops<I, T>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = T>,
+        T: Into<Cow<'a, str>>,
+    {
+        self.shops
+            .get_or_insert_with(BTreeSet::new)
+            .extend(iter.map(Into::into));
+        self
     }
 }
 

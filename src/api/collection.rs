@@ -2,12 +2,25 @@ use crate::api::{endpoint::Endpoint, error::BodyError};
 use derive_builder::Builder;
 use http::Method;
 use serde::Serialize;
-use std::{borrow::Cow, collections::HashSet};
+use std::{borrow::Cow, collections::BTreeSet, fmt::Display};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CollectionCheckOptions {
     Stores,
+}
+
+impl CollectionCheckOptions {
+    fn as_str(&self) -> &'static str {
+        match self {
+            CollectionCheckOptions::Stores => "stores",
+        }
+    }
+}
+
+impl Display for CollectionCheckOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Builder)]
@@ -15,13 +28,32 @@ pub enum CollectionCheckOptions {
 #[serde(rename_all = "snake_case")]
 pub struct CollectionCheck<'a> {
     plain: Cow<'a, str>,
-    #[serde(serialize_with = "super::utils::serialize_hash_set_urlencoded")]
-    optional: Option<HashSet<CollectionCheckOptions>>,
+    #[builder(setter(name = "_optional"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    optional: BTreeSet<CollectionCheckOptions>,
 }
 
 impl<'a> CollectionCheck<'a> {
     pub fn builder() -> CollectionCheckBuilder<'a> {
         CollectionCheckBuilder::default()
+    }
+}
+
+impl<'a> CollectionCheckBuilder<'a> {
+    pub fn option(&mut self, option: CollectionCheckOptions) -> &mut Self {
+        self.optional
+            .get_or_insert_with(BTreeSet::new)
+            .insert(option);
+        self
+    }
+
+    pub fn options<I>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = CollectionCheckOptions>,
+    {
+        self.optional.get_or_insert_with(BTreeSet::new).extend(iter);
+        self
     }
 }
 
@@ -44,13 +76,29 @@ impl Endpoint for CollectionCheck<'_> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CollectionOptions {
     Plain,
     Title,
     Gameid,
     CopyType,
+}
+
+impl CollectionOptions {
+    fn as_str(&self) -> &'static str {
+        match self {
+            CollectionOptions::Plain => "plain",
+            CollectionOptions::Title => "title",
+            CollectionOptions::Gameid => "gameid",
+            CollectionOptions::CopyType => "copy_type",
+        }
+    }
+}
+
+impl Display for CollectionOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Builder)]
@@ -59,8 +107,9 @@ pub enum CollectionOptions {
 pub struct Collection<'a> {
     shop: Option<Cow<'a, str>>,
     short: Option<bool>,
-    #[serde(serialize_with = "super::utils::serialize_iter_urlencoded")]
-    optional: HashSet<CollectionOptions>,
+    #[builder(setter(name = "_optional"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    optional: BTreeSet<CollectionOptions>,
 }
 
 impl<'a> Collection<'a> {
@@ -70,6 +119,21 @@ impl<'a> Collection<'a> {
 }
 
 impl CollectionBuilder<'_> {
+    pub fn option(&mut self, option: CollectionOptions) -> &mut Self {
+        self.optional
+            .get_or_insert_with(BTreeSet::new)
+            .insert(option);
+        self
+    }
+
+    pub fn options<I>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = CollectionOptions>,
+    {
+        self.optional.get_or_insert_with(BTreeSet::new).extend(iter);
+        self
+    }
+
     fn validate(&self) -> Result<(), String> {
         if let Some(optional) = &self.optional {
             if !optional.contains(&CollectionOptions::Plain)

@@ -1,15 +1,28 @@
-use std::{borrow::Cow, collections::HashSet};
+use std::{borrow::Cow, collections::BTreeSet, fmt::Display};
 
 use derive_builder::Builder;
 use http::Method;
-use serde::{de::IntoDeserializer, Serialize};
+use serde::Serialize;
 
 use super::endpoint::Endpoint;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum IdentifierOptions {
     Title,
+}
+
+impl IdentifierOptions {
+    fn as_str(&self) -> &'static str {
+        match self {
+            IdentifierOptions::Title => "title",
+        }
+    }
+}
+
+impl Display for IdentifierOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Builder)]
@@ -20,8 +33,10 @@ pub struct Identifier<'a> {
     game_id: Option<Cow<'a, str>>,
     url: Option<Cow<'a, str>>,
     title: Option<Cow<'a, str>>,
-    #[serde(serialize_with = "super::utils::serialize_hash_set_urlencoded")]
-    optional: Option<HashSet<IdentifierOptions>>,
+    #[builder(setter(name = "_optional"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    optional: BTreeSet<IdentifierOptions>,
 }
 
 impl<'a> Identifier<'a> {
@@ -31,6 +46,21 @@ impl<'a> Identifier<'a> {
 }
 
 impl IdentifierBuilder<'_> {
+    pub fn option(&mut self, option: IdentifierOptions) -> &mut Self {
+        self.optional
+            .get_or_insert_with(BTreeSet::new)
+            .insert(option);
+        self
+    }
+
+    pub fn options<I>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = IdentifierOptions>,
+    {
+        self.optional.get_or_insert_with(BTreeSet::new).extend(iter);
+        self
+    }
+
     fn validate(&self) -> Result<(), String> {
         if self.game_id.is_some() && self.shop.is_none() {
             return Err("Shop is required to be set when looking up by ID".into());
@@ -67,14 +97,37 @@ impl Endpoint for Identifier<'_> {
 #[serde(rename_all = "snake_case")]
 pub struct MultiplePlainsById<'a> {
     shop: Cow<'a, str>,
-    // This can be sent as a JSON array in a POST body, maybe do that?
-    #[serde(serialize_with = "super::utils::serialize_vec_urlencoded")]
-    ids: Option<Vec<Cow<'a, str>>>,
+    // This can be sent as a JSON array in a POST body, maybe do that instead?
+    #[builder(setter(name = "_ids"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    ids: BTreeSet<Cow<'a, str>>,
 }
 
 impl<'a> MultiplePlainsById<'a> {
     pub fn builder() -> MultiplePlainsByIdBuilder<'a> {
         MultiplePlainsByIdBuilder::default()
+    }
+}
+
+impl<'a> MultiplePlainsByIdBuilder<'a> {
+    pub fn id<T>(&mut self, id: T) -> &mut Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.ids.get_or_insert_with(BTreeSet::new).insert(id.into());
+        self
+    }
+
+    pub fn ids<I, T>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = T>,
+        T: Into<Cow<'a, str>>,
+    {
+        self.ids
+            .get_or_insert_with(BTreeSet::new)
+            .extend(iter.map(Into::into));
+        self
     }
 }
 
@@ -173,20 +226,90 @@ impl Endpoint for IdPlainMap<'_> {
 #[builder(setter(into, strip_option))]
 #[serde(rename_all = "snake_case")]
 pub struct Prices<'a> {
-    #[serde(serialize_with = "super::utils::serialize_iter_urlencoded")]
-    plains: Vec<Cow<'a, str>>,
+    #[builder(setter(name = "_plains"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    plains: BTreeSet<Cow<'a, str>>,
     region: Option<Cow<'a, str>>,
     country: Option<Cow<'a, str>>,
-    #[serde(serialize_with = "super::utils::serialize_vec_urlencoded")]
-    shops: Option<Vec<Cow<'a, str>>>,
-    #[serde(serialize_with = "super::utils::serialize_vec_urlencoded")]
-    exclude: Option<Vec<Cow<'a, str>>>,
+    #[builder(setter(name = "_shops"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    shops: BTreeSet<Cow<'a, str>>,
+    #[builder(setter(name = "_exclude"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    exclude: BTreeSet<Cow<'a, str>>,
     added: Option<Cow<'a, str>>,
 }
 
 impl<'a> Prices<'a> {
     pub fn builder() -> PricesBuilder<'a> {
         PricesBuilder::default()
+    }
+}
+
+impl<'a> PricesBuilder<'a> {
+    pub fn plain<T>(&mut self, plain: T) -> &mut Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.plains
+            .get_or_insert_with(BTreeSet::new)
+            .insert(plain.into());
+        self
+    }
+
+    pub fn plains<I, T>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = T>,
+        T: Into<Cow<'a, str>>,
+    {
+        self.plains
+            .get_or_insert_with(BTreeSet::new)
+            .extend(iter.map(Into::into));
+        self
+    }
+
+    pub fn shop<T>(&mut self, shop: T) -> &mut Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.shops
+            .get_or_insert_with(BTreeSet::new)
+            .insert(shop.into());
+        self
+    }
+
+    pub fn shops<I, T>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = T>,
+        T: Into<Cow<'a, str>>,
+    {
+        self.shops
+            .get_or_insert_with(BTreeSet::new)
+            .extend(iter.map(Into::into));
+        self
+    }
+
+    pub fn exclude<T>(&mut self, exclude: T) -> &mut Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.exclude
+            .get_or_insert_with(BTreeSet::new)
+            .insert(exclude.into());
+        self
+    }
+
+    pub fn excludes<I, T>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = T>,
+        T: Into<Cow<'a, str>>,
+    {
+        self.exclude
+            .get_or_insert_with(BTreeSet::new)
+            .extend(iter.map(Into::into));
+        self
     }
 }
 
@@ -212,14 +335,19 @@ impl Endpoint for Prices<'_> {
 #[builder(setter(into, strip_option))]
 #[serde(rename_all = "snake_case")]
 pub struct HistoricalLow<'a> {
-    #[serde(serialize_with = "super::utils::serialize_iter_urlencoded")]
-    plains: Vec<Cow<'a, str>>,
+    #[builder(setter(name = "_plains"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    plains: BTreeSet<Cow<'a, str>>,
     region: Option<Cow<'a, str>>,
     country: Option<Cow<'a, str>>,
-    #[serde(serialize_with = "super::utils::serialize_vec_urlencoded")]
-    shops: Option<Vec<Cow<'a, str>>>,
-    #[serde(serialize_with = "super::utils::serialize_vec_urlencoded")]
-    exclude: Option<Vec<Cow<'a, str>>>,
+    #[builder(setter(name = "_shops"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    shops: BTreeSet<Cow<'a, str>>,
+    #[builder(setter(name = "_exclude"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    exclude: BTreeSet<Cow<'a, str>>,
     since: Option<u64>,
     until: Option<u64>,
     new: Option<bool>,
@@ -228,6 +356,71 @@ pub struct HistoricalLow<'a> {
 impl<'a> HistoricalLow<'a> {
     pub fn builder() -> HistoricalLowBuilder<'a> {
         HistoricalLowBuilder::default()
+    }
+}
+
+impl<'a> HistoricalLowBuilder<'a> {
+    pub fn plain<T>(&mut self, plain: T) -> &mut Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.plains
+            .get_or_insert_with(BTreeSet::new)
+            .insert(plain.into());
+        self
+    }
+
+    pub fn plains<I, T>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = T>,
+        T: Into<Cow<'a, str>>,
+    {
+        self.plains
+            .get_or_insert_with(BTreeSet::new)
+            .extend(iter.map(Into::into));
+        self
+    }
+
+    pub fn shop<T>(&mut self, shop: T) -> &mut Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.shops
+            .get_or_insert_with(BTreeSet::new)
+            .insert(shop.into());
+        self
+    }
+
+    pub fn shops<I, T>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = T>,
+        T: Into<Cow<'a, str>>,
+    {
+        self.shops
+            .get_or_insert_with(BTreeSet::new)
+            .extend(iter.map(Into::into));
+        self
+    }
+
+    pub fn exclude<T>(&mut self, exclude: T) -> &mut Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.exclude
+            .get_or_insert_with(BTreeSet::new)
+            .insert(exclude.into());
+        self
+    }
+
+    pub fn excludes<I, T>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = T>,
+        T: Into<Cow<'a, str>>,
+    {
+        self.exclude
+            .get_or_insert_with(BTreeSet::new)
+            .extend(iter.map(Into::into));
+        self
     }
 }
 
@@ -253,19 +446,89 @@ impl Endpoint for HistoricalLow<'_> {
 #[builder(setter(into, strip_option))]
 #[serde(rename_all = "snake_case")]
 pub struct StoreLow<'a> {
-    #[serde(serialize_with = "super::utils::serialize_iter_urlencoded")]
-    plains: Vec<Cow<'a, str>>,
+    #[builder(setter(name = "_plains"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    plains: BTreeSet<Cow<'a, str>>,
     region: Option<Cow<'a, str>>,
     country: Option<Cow<'a, str>>,
-    #[serde(serialize_with = "super::utils::serialize_vec_urlencoded")]
-    shops: Option<Vec<Cow<'a, str>>>,
-    #[serde(serialize_with = "super::utils::serialize_vec_urlencoded")]
-    exclude: Option<Vec<Cow<'a, str>>>,
+    #[builder(setter(name = "_shops"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    shops: BTreeSet<Cow<'a, str>>,
+    #[builder(setter(name = "_exclude"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    exclude: BTreeSet<Cow<'a, str>>,
 }
 
 impl<'a> StoreLow<'a> {
     pub fn builder() -> StoreLowBuilder<'a> {
         StoreLowBuilder::default()
+    }
+}
+
+impl<'a> StoreLowBuilder<'a> {
+    pub fn plain<T>(&mut self, plain: T) -> &mut Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.plains
+            .get_or_insert_with(BTreeSet::new)
+            .insert(plain.into());
+        self
+    }
+
+    pub fn plains<I, T>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = T>,
+        T: Into<Cow<'a, str>>,
+    {
+        self.plains
+            .get_or_insert_with(BTreeSet::new)
+            .extend(iter.map(Into::into));
+        self
+    }
+
+    pub fn shop<T>(&mut self, shop: T) -> &mut Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.shops
+            .get_or_insert_with(BTreeSet::new)
+            .insert(shop.into());
+        self
+    }
+
+    pub fn shops<I, T>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = T>,
+        T: Into<Cow<'a, str>>,
+    {
+        self.shops
+            .get_or_insert_with(BTreeSet::new)
+            .extend(iter.map(Into::into));
+        self
+    }
+
+    pub fn exclude<T>(&mut self, exclude: T) -> &mut Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.exclude
+            .get_or_insert_with(BTreeSet::new)
+            .insert(exclude.into());
+        self
+    }
+
+    pub fn excludes<I, T>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = T>,
+        T: Into<Cow<'a, str>>,
+    {
+        self.exclude
+            .get_or_insert_with(BTreeSet::new)
+            .extend(iter.map(Into::into));
+        self
     }
 }
 
@@ -298,8 +561,9 @@ pub enum BundlesSorting {
 #[builder(setter(into, strip_option))]
 #[serde(rename_all = "snake_case")]
 pub struct Bundles<'a> {
-    #[serde(serialize_with = "super::utils::serialize_iter_urlencoded")]
-    plains: Vec<Cow<'a, str>>,
+    #[builder(setter(name = "_plains"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    plains: BTreeSet<Cow<'a, str>>,
     limit: Option<i64>,
     expired: Option<bool>,
     sort: Option<BundlesSorting>,
@@ -309,6 +573,29 @@ pub struct Bundles<'a> {
 impl<'a> Bundles<'a> {
     pub fn builder() -> BundlesBuilder<'a> {
         BundlesBuilder::default()
+    }
+}
+
+impl<'a> BundlesBuilder<'a> {
+    pub fn plain<T>(&mut self, plain: T) -> &mut Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.plains
+            .get_or_insert_with(BTreeSet::new)
+            .insert(plain.into());
+        self
+    }
+
+    pub fn plains<I, T>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = T>,
+        T: Into<Cow<'a, str>>,
+    {
+        self.plains
+            .get_or_insert_with(BTreeSet::new)
+            .extend(iter.map(Into::into));
+        self
     }
 }
 
@@ -326,25 +613,79 @@ impl Endpoint for Bundles<'_> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum InfoOptions {
     Metacritic,
+}
+
+impl InfoOptions {
+    fn as_str(&self) -> &'static str {
+        match self {
+            InfoOptions::Metacritic => "metacritic",
+        }
+    }
+}
+
+impl Display for InfoOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Builder)]
 #[builder(setter(into, strip_option))]
 #[serde(rename_all = "snake_case")]
 pub struct Info<'a> {
-    #[serde(serialize_with = "super::utils::serialize_iter_urlencoded")]
-    plains: Vec<Cow<'a, str>>,
-    #[serde(serialize_with = "super::utils::serialize_hash_set_urlencoded")]
-    optional: Option<HashSet<InfoOptions>>,
+    #[builder(setter(name = "_plains"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    plains: BTreeSet<Cow<'a, str>>,
+    #[builder(setter(name = "_optional"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    optional: BTreeSet<InfoOptions>,
 }
 
 impl<'a> Info<'a> {
     pub fn builder() -> InfoBuilder<'a> {
         InfoBuilder::default()
+    }
+}
+
+impl<'a> InfoBuilder<'a> {
+    pub fn plain<T>(&mut self, plain: T) -> &mut Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.plains
+            .get_or_insert_with(BTreeSet::new)
+            .insert(plain.into());
+        self
+    }
+
+    pub fn plains<I, T>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = T>,
+        T: Into<Cow<'a, str>>,
+    {
+        self.plains
+            .get_or_insert_with(BTreeSet::new)
+            .extend(iter.map(Into::into));
+        self
+    }
+
+    pub fn option(&mut self, option: InfoOptions) -> &mut Self {
+        self.optional
+            .get_or_insert_with(BTreeSet::new)
+            .insert(option);
+        self
+    }
+
+    pub fn options<I>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = InfoOptions>,
+    {
+        self.optional.get_or_insert_with(BTreeSet::new).extend(iter);
+        self
     }
 }
 
@@ -366,11 +707,25 @@ impl Endpoint for Info<'_> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum OverviewOptions {
     Voucher,
     Local,
+}
+
+impl OverviewOptions {
+    fn as_str(&self) -> &'static str {
+        match self {
+            OverviewOptions::Voucher => "voucher",
+            OverviewOptions::Local => "local",
+        }
+    }
+}
+
+impl Display for OverviewOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Builder)]
@@ -379,20 +734,106 @@ pub enum OverviewOptions {
 pub struct Overview<'a> {
     region: Option<Cow<'a, str>>,
     country: Option<Cow<'a, str>>,
-    #[serde(serialize_with = "super::utils::serialize_vec_urlencoded")]
-    plains: Option<Vec<Cow<'a, str>>>,
+    #[builder(setter(name = "_plains"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    plains: BTreeSet<Cow<'a, str>>,
     shop: Option<Cow<'a, str>>,
-    #[serde(serialize_with = "super::utils::serialize_vec_urlencoded")]
-    ids: Option<Vec<Cow<'a, str>>>,
-    #[serde(serialize_with = "super::utils::serialize_vec_urlencoded")]
-    allowed: Option<Vec<Cow<'a, str>>>,
-    #[serde(serialize_with = "super::utils::serialize_hash_set_urlencoded")]
-    optional: Option<HashSet<OverviewOptions>>,
+    #[builder(setter(name = "_ids"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    ids: BTreeSet<Cow<'a, str>>,
+    #[builder(setter(name = "_allowed"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    allowed: BTreeSet<Cow<'a, str>>,
+    #[builder(setter(name = "_optional"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    optional: BTreeSet<OverviewOptions>,
 }
 
 impl<'a> Overview<'a> {
     pub fn builder() -> OverviewBuilder<'a> {
         OverviewBuilder::default()
+    }
+}
+
+impl<'a> OverviewBuilder<'a> {
+    pub fn plain<T>(&mut self, plain: T) -> &mut Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.plains
+            .get_or_insert_with(BTreeSet::new)
+            .insert(plain.into());
+        self
+    }
+
+    pub fn plains<I, T>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = T>,
+        T: Into<Cow<'a, str>>,
+    {
+        self.plains
+            .get_or_insert_with(BTreeSet::new)
+            .extend(iter.map(Into::into));
+        self
+    }
+
+    pub fn id<T>(&mut self, id: T) -> &mut Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.ids.get_or_insert_with(BTreeSet::new).insert(id.into());
+        self
+    }
+
+    pub fn ids<I, T>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = T>,
+        T: Into<Cow<'a, str>>,
+    {
+        self.ids
+            .get_or_insert_with(BTreeSet::new)
+            .extend(iter.map(Into::into));
+        self
+    }
+
+    pub fn allowed<T>(&mut self, allowed: T) -> &mut Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.allowed
+            .get_or_insert_with(BTreeSet::new)
+            .insert(allowed.into());
+        self
+    }
+
+    pub fn alloweds<I, T>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = T>,
+        T: Into<Cow<'a, str>>,
+    {
+        self.allowed
+            .get_or_insert_with(BTreeSet::new)
+            .extend(iter.map(Into::into));
+        self
+    }
+
+    pub fn option(&mut self, option: OverviewOptions) -> &mut Self {
+        self.optional
+            .get_or_insert_with(BTreeSet::new)
+            .insert(option);
+        self
+    }
+
+    pub fn options<I>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = OverviewOptions>,
+    {
+        self.optional.get_or_insert_with(BTreeSet::new).extend(iter);
+        self
     }
 }
 

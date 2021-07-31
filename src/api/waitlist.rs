@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::BTreeSet};
 
 use derive_builder::Builder;
 use http::Method;
@@ -160,16 +160,62 @@ impl Endpoint for ImportWaitlist<'_> {
 #[builder(setter(into, strip_option))]
 #[serde(rename_all = "snake_case")]
 pub struct WaitlistRemove<'a> {
-    #[serde(serialize_with = "super::utils::serialize_vec_urlencoded")]
-    plains: Option<Vec<Cow<'a, str>>>,
+    #[builder(setter(name = "_plains"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    plains: BTreeSet<Cow<'a, str>>,
     shop: Option<Cow<'a, str>>,
-    #[serde(serialize_with = "super::utils::serialize_iter_urlencoded")]
-    ids: Option<Vec<Cow<'a, str>>>,
+    #[builder(setter(name = "_ids"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    ids: BTreeSet<Cow<'a, str>>,
 }
 
 impl<'a> WaitlistRemove<'a> {
     pub fn builder() -> WaitlistRemoveBuilder<'a> {
         WaitlistRemoveBuilder::default()
+    }
+}
+
+impl<'a> WaitlistRemoveBuilder<'a> {
+    pub fn plain<T>(&mut self, plain: T) -> &mut Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.plains
+            .get_or_insert_with(BTreeSet::new)
+            .insert(plain.into());
+        self
+    }
+
+    pub fn plains<I, T>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = T>,
+        T: Into<Cow<'a, str>>,
+    {
+        self.plains
+            .get_or_insert_with(BTreeSet::new)
+            .extend(iter.map(Into::into));
+        self
+    }
+
+    pub fn id<T>(&mut self, id: T) -> &mut Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.ids.get_or_insert_with(BTreeSet::new).insert(id.into());
+        self
+    }
+
+    pub fn ids<I, T>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = T>,
+        T: Into<Cow<'a, str>>,
+    {
+        self.ids
+            .get_or_insert_with(BTreeSet::new)
+            .extend(iter.map(Into::into));
+        self
     }
 }
 

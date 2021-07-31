@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashSet};
+use std::{borrow::Cow, collections::BTreeSet, fmt::Display};
 
 use http::Method;
 
@@ -6,23 +6,55 @@ use super::endpoint::Endpoint;
 use derive_builder::Builder;
 use serde::Serialize;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RegionDisplayOptions {
     Names,
+}
+
+impl RegionDisplayOptions {
+    fn as_str(&self) -> &'static str {
+        match self {
+            RegionDisplayOptions::Names => "names",
+        }
+    }
+}
+
+impl Display for RegionDisplayOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Builder)]
 #[builder(setter(into, strip_option))]
 #[serde(rename_all = "snake_case")]
 pub struct Regions {
-    #[serde(serialize_with = "super::utils::serialize_hash_set_urlencoded")]
-    optional: Option<HashSet<RegionDisplayOptions>>,
+    #[builder(setter(name = "_optional"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    optional: BTreeSet<RegionDisplayOptions>,
 }
 
 impl Regions {
     pub fn builder() -> RegionsBuilder {
         RegionsBuilder::default()
+    }
+}
+
+impl RegionsBuilder {
+    pub fn option(&mut self, option: RegionDisplayOptions) -> &mut Self {
+        self.optional
+            .get_or_insert_with(BTreeSet::new)
+            .insert(option);
+        self
+    }
+
+    pub fn options<I>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = RegionDisplayOptions>,
+    {
+        self.optional.get_or_insert_with(BTreeSet::new).extend(iter);
+        self
     }
 }
 
@@ -40,11 +72,25 @@ impl Endpoint for Regions {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum StoresDisplayOptions {
     Deals,
     Catalog,
+}
+
+impl StoresDisplayOptions {
+    fn as_str(&self) -> &'static str {
+        match self {
+            StoresDisplayOptions::Deals => "deals",
+            StoresDisplayOptions::Catalog => "catalog",
+        }
+    }
+}
+
+impl Display for StoresDisplayOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Builder)]
@@ -53,13 +99,32 @@ pub enum StoresDisplayOptions {
 pub struct StoresInRegion<'a> {
     region: Cow<'a, str>,
     country: Option<Cow<'a, str>>,
-    #[serde(serialize_with = "super::utils::serialize_hash_set_urlencoded")]
-    optional: Option<HashSet<StoresDisplayOptions>>,
+    #[builder(setter(name = "_optional"), private)]
+    #[serde(serialize_with = "super::utils::serialize_as_csv")]
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    optional: BTreeSet<StoresDisplayOptions>,
 }
 
 impl<'a> StoresInRegion<'a> {
     pub fn builder() -> StoresInRegionBuilder<'a> {
         StoresInRegionBuilder::default()
+    }
+}
+
+impl<'a> StoresInRegionBuilder<'a> {
+    pub fn option(&mut self, option: StoresDisplayOptions) -> &mut Self {
+        self.optional
+            .get_or_insert_with(BTreeSet::new)
+            .insert(option);
+        self
+    }
+
+    pub fn options<I>(&mut self, iter: I) -> &mut Self
+    where
+        I: Iterator<Item = StoresDisplayOptions>,
+    {
+        self.optional.get_or_insert_with(BTreeSet::new).extend(iter);
+        self
     }
 }
 
