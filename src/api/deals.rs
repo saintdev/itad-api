@@ -89,7 +89,8 @@ where
 {
     if let Some(value) = value {
         let mut out = String::new();
-        let direction = match value {
+        // LMAO
+        match match value {
             DealsSorting::Time(direction) => {
                 out.push_str("time:");
                 direction
@@ -106,8 +107,7 @@ where
                 out.push_str("expiry:");
                 direction
             }
-        };
-        match direction {
+        } {
             Direction::Asc => out.push_str("asc"),
             Direction::Desc => out.push_str("desc"),
         };
