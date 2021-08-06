@@ -4,7 +4,10 @@
 // TODO: Documentation
 //#![warn(missing_docs)]
 
-mod api;
+pub mod api;
 pub(crate) mod auth;
 mod client;
 mod error;
+
+pub use client::{ItadApiBuilder, ItadApiClient, ItadApiClientAsync};
+pub use error::{ItadApiError, ItadApiResult};

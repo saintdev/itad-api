@@ -25,8 +25,8 @@ impl Display for RegionDisplayOptions {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Builder)]
-#[builder(setter(into, strip_option))]
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Builder)]
+#[builder(default, setter(into, strip_option))]
 #[serde(rename_all = "snake_case")]
 pub struct Regions {
     #[builder(setter(name = "_optional"), private)]

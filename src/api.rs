@@ -15,3 +15,4 @@ pub mod web;
 
 pub use client::{AsyncClient, Client, RestClient};
 pub use error::ApiError;
+pub use query::{AsyncQuery, Query};
